@@ -310,6 +310,25 @@ final class TouchLayout {
         controls.get(control).y = Math.max(r, Math.min(height - r, y));
     }
 
+    void restore(int control, float x, float y) {
+        if (!Float.isFinite(x) || !Float.isFinite(y) || x < 0 || x > GRID_WIDTH || y < 0 || y > GRID_HEIGHT)
+            return;
+        if (control < 0 || control >= controls.size())
+            return;
+        Control c = controls.get(control);
+        c.x = x * width / GRID_WIDTH;
+        c.y = y * height / GRID_HEIGHT;
+        move(control, c.x, c.y);
+    }
+
+    void restore(int control, float x, int y) {
+        restore(control, x, (float) y);
+    }
+
+    void restore(int control, int x, int y) {
+        restore(control, (float) x, (float) y);
+    }
+
     private void keepAllInside() {
         for (int i = 0; i < size(); i++)
             move(i, x(i), y(i));
