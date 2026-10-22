@@ -20,10 +20,11 @@ name: Build
 # https://github.com/<repository>/releases/latest/download/<file> always
 # gives the latest build; the last five are kept. Its web build is then the
 # site on GitHub Pages (https://halocombatevolved.com/, port/web/README.md).
+# on:
+#  push:
+#    paths-ignore:
+#      - "**.md"
 on:
-  push:
-    paths-ignore:
-      - "**.md"
   workflow_dispatch:
     inputs:
       profile:
