@@ -32,6 +32,9 @@ final class TouchLayout {
     static final int MODE_STANDARD = 0;
     static final int MODE_TAP_AND_HOLD = 1;
     static final int MODE_TOGGLE = 2;
+    
+    // Scale factor applied when a button is actively pressed or toggled down
+    static final float PRESS_SCALE_FACTOR = 0.90f; // Shrinks to 90% when pressed
 
     private static final float GRID_WIDTH = 960;
     private static final float GRID_HEIGHT = 540;
@@ -93,6 +96,7 @@ final class TouchLayout {
     boolean gyroscopeEnabled = false;
     float opacity = 1f;
     boolean floatingStick = false;
+    String pressTint = "#4FC3F7"; // Universal default press tint (Light Blue)
 
     TouchLayout() {
         resetDefaults();
@@ -123,7 +127,6 @@ final class TouchLayout {
     float savedX(int control) { return x(control) * GRID_WIDTH / width; }
     float savedY(int control) { return y(control) * GRID_HEIGHT / height; }
 
-    // Uniform sizing: all buttons scale down smoothly without being clamped by a rigid minimum
     float radius(int control) {
         int t = type(control);
         float baseR = (t == LEFT) ? STICK_BASE_RADIUS : BUTTON_BASE_RADIUS;
@@ -205,18 +208,19 @@ final class TouchLayout {
             }
             controls.add(c);
         }
+        pressTint = "#4FC3F7";
         keepAllInside();
     }
 
     void resetSingleControl(int control, boolean resetIcon) {
         if (control < 0 || control >= controls.size()) return;
         Control c = controls.get(control);
-        int t = c.type;
+        /*int t = c.type;
         if (t >= 0 && t < DEFAULTS.length) {
             c.x = DEFAULTS[t][0] * width / GRID_WIDTH;
             c.y = DEFAULTS[t][1] * height / GRID_HEIGHT;
         }
-        c.size = 1f;
+        c.size = 1f;*/
         c.opacity = -1f;
         c.shown = true;
         c.mode = MODE_STANDARD;
@@ -321,6 +325,7 @@ final class TouchLayout {
         values.setProperty("gyroscope", Boolean.toString(gyroscopeEnabled));
         values.setProperty("opacity", Float.toString(opacity));
         values.setProperty("floating-stick", Boolean.toString(floatingStick));
+        values.setProperty("press-tint", pressTint != null ? pressTint : "#4FC3F7");
         values.setProperty("count", Integer.toString(size()));
         values.setProperty("sensitivity", Float.toString(sensitivity));
         for (int i = 0; i < size(); i++) {
@@ -372,6 +377,10 @@ final class TouchLayout {
                     throw new IllegalArgumentException("Invalid opacity");
                 layout.opacity = opacity;
                 layout.floatingStick = readBoolean(values, "floating-stick");
+            }
+            String tint = values.getProperty("press-tint");
+            if (tint != null && !tint.trim().isEmpty()) {
+                layout.pressTint = tint.trim();
             }
             for (int i = 0; i < count; i++)
                 layout.controls.add(readControl(values, i, version));
