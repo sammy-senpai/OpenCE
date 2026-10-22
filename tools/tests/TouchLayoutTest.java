@@ -7,7 +7,7 @@ public final class TouchLayoutTest {
     }
     public static void main(String[] args) {
         TouchLayout layout = new TouchLayout();
-        check(layout.size() == 18, "All 17 buttons and the movement stick must be editable");
+        check(layout.size() == 19, "All 18 controls including the toggle button must be present");
         check(layout.x(TouchLayout.LEFT) == 115 && layout.y(TouchLayout.FIRE_LEFT) == 239,
               "Existing layouts must start with the original controls");
         layout.move(TouchLayout.LEFT, -500, -500);
@@ -43,7 +43,7 @@ public final class TouchLayoutTest {
         check(wide.x(0) == reopened.x(0), "Widescreen positions must survive reload");
         // Duplicates retain their action and are independently placed and hidden.
         int copy = wide.duplicate(4);
-        check(copy == 18 && wide.type(copy) == 4, "Fire copies must retain the fire action");
+        check(copy == 19 && wide.type(copy) == 4, "Fire copies must retain the fire action");
         wide.setShown(4, false);
         wide.move(copy, 300, 100);
         check(!wide.shown(4) && wide.shown(copy), "Hiding an original must not hide its copy");
@@ -51,7 +51,7 @@ public final class TouchLayoutTest {
         String exported = wide.exportConfiguration(2.25f);
         TouchLayout.Configuration imported = TouchLayout.importConfiguration(exported);
         imported.layout.bounds(1200, 540);
-        check(imported.sensitivity == 2.25f && imported.layout.size() == 19,
+        check(imported.sensitivity == 2.25f && imported.layout.size() == 20,
               "Configuration must preserve sensitivity and duplicates");
         for (int i = 0; i < wide.size(); i++) {
             check(imported.layout.type(i) == wide.type(i) && imported.layout.shown(i) == wide.shown(i)
@@ -63,9 +63,9 @@ public final class TouchLayoutTest {
         wide.setShown(TouchLayout.LEFT, false);
         check(wide.add(TouchLayout.LEFT) == TouchLayout.LEFT, "Hidden move stick must be restorable");
         reject(exported.replace("version=3", "version=9"));
-        reject(exported.replace("control.18.type=4", "control.18.type=16"));
-        reject(exported.replace("control.18.x=240.0", "control.18.x=NaN"));
-        reject(exported.replace("count=19", "count=10000"));
+        reject(exported.replace("control.19.type=4", "control.19.type=16"));
+        reject(exported.replaceAll("control\\.19\\.x=[0-9.]+", "control.19.x=NaN"));
+        reject(exported.replace("count=20", "count=10000"));
         reject(exported.replace("sensitivity=2.25", "sensitivity=Infinity"));
         reject(exported.replace("control.0.visible=false", "control.0.visible=maybe")
             .replace("control.0.visible=true", "control.0.visible=maybe"));
@@ -82,8 +82,8 @@ public final class TouchLayoutTest {
         check(wide.x(copy)+wide.radius(copy) <= 1200 && wide.y(copy)+wide.radius(copy) <= 540,
               "Growing a button at the edge must keep it reachable");
         String sizedText = sized.layout.exportConfiguration(2.25f);
-        reject(sizedText.replace("control.18.size=1.6", "control.18.size=NaN"));
-        reject(sizedText.replace("control.18.size=1.6", "control.18.size=3.0"));
+        reject(sizedText.replaceAll("control\\.19\\.size=[0-9.]+", "control.19.size=NaN"));
+        reject(sizedText.replaceAll("control\\.19\\.size=[0-9.]+", "control.19.size=3.0"));
         reject(sizedText.replace("rumble=false", "rumble=invalid"));
         reject(sizedText.replace("gyroscope=true", "gyroscope=invalid"));
         String legacy = sizedText.replace("version=3", "version=1").replaceAll("(?m)^.*\\.size=.*\\R", "")
@@ -134,7 +134,7 @@ public final class TouchLayoutTest {
         fingers.setMinimumRadius(Float.NaN);
         check(fingers.radius(12) == 25, "An invalid minimum radius is none");
         wide.resetDefaults();
-        check(wide.size() == 18 && wide.shown(4) && wide.x(4) == 915*1200f/960,
+        check(wide.size() == 19 && wide.shown(4) && wide.x(4) == 915*1200f/960,
               "Reset restores defaults on the current display and removes all copies");
         check(wide.sizeScale(4) == 1f && !wide.rumbleEnabled && wide.gyroscopeEnabled,
               "Button reset must restore sizes without changing General settings");
