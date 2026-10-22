@@ -40,18 +40,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Explicitly inject "build X" (with a space) into the app files, 
-      # and use the run number as the numeric versionCode.
+      # Safely update versionName to "build X" and versionCode to X using Python
       - name: Inject Custom Version into Gradle
+        env:
+          RUN_NUM: ${{ github.run_number }}
         run: |
-          RUN_NUM="${{ github.run_number }}"
-          echo "Setting app version name to 'build $RUN_NUM' and version code to $RUN_NUM"
-          find . -name "build.gradle*" -type f | while read -r file; do
-            sed -i 's/versionName\s*=\s*"[^"]*"/versionName "build '"$RUN_NUM"'"/g' "$file" || true
-            sed -i 's/versionName\s*"[^"]*"/versionName "build '"$RUN_NUM"'"/g' "$file" || true
-            sed -i 's/versionCode\s*=\s*[0-9]*/versionCode '"$RUN_NUM"'/g' "$file" || true
-            sed -i 's/versionCode\s*[0-9]*/versionCode '"$RUN_NUM"'/g' "$file" || true
-          done
+          python3 -c '
+          import os, re
+          run_num = os.environ["RUN_NUM"]
+          gradle_path = "port/android/app/build.gradle"
+          if os.path.exists(gradle_path):
+              with open(gradle_path, "r") as f:
+                  content = f.read()
+              # Safely replace versionName and versionCode without touching math functions
+              content = re.sub(r"versionName\s+([\"\x27]).*?\1", f"versionName \"build {run_num}\"", content)
+              content = re.sub(r"versionCode\s+\d+", f"versionCode {run_num}", content)
+              with open(gradle_path, "w") as f:
+                  f.write(content)
+              print(f"Successfully updated {gradle_path} to build {run_num}")
+          else:
+              print(f"Warning: {gradle_path} not found")
+          '
 
       - uses: actions/cache@v4
         with:
