@@ -40,27 +40,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Directly inject "build X" (with a space) into build.gradle, bypassing git describe limits
+      # Safely inject version using a Python heredoc script
       - name: Inject Version into Gradle
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
-          python3 -c '
+          python3 - << 'EOF'
           import os, re
           run_num = os.environ["RUN_NUM"]
           gradle_path = "port/android/app/build.gradle"
           if os.path.exists(gradle_path):
               with open(gradle_path, "r") as f:
                   content = f.read()
-              # Directly override versionName and versionCode
-              content = re.sub(r"versionName\s+[^\n]+", f"versionName \"build {run_num}\"", content)
+              content = re.sub(r"versionName\s+[^\n]+", f'versionName "build {run_num}"', content)
               content = re.sub(r"versionCode\s+[^\n]+", f"versionCode {run_num}", content)
               with open(gradle_path, "w") as f:
                   f.write(content)
               print(f"Successfully set app version to 'build {run_num}' and code to {run_num}")
           else:
               print(f"Error: {gradle_path} not found")
-          '
+          EOF
 
       - uses: actions/cache@v4
         with:
