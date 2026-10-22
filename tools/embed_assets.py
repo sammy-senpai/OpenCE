@@ -22,7 +22,7 @@ no files beside its guest image.
 
 The data are 32-bit words, not bytes: the Android build passes the guest's
 assembly through tools/android_asm_convert.py, which rewrites identifiers in
-operands and would garble a long .ascii string of binary data.
+operands (it keeps .ascii strings as they are, but once garbled them).
 """
 
 import json
@@ -34,6 +34,8 @@ from typing import Any, List
 ROOT = Path(__file__).resolve().parent.parent
 HUD_ASSETS = Path("port/assets/hud")
 LAYOUT = HUD_ASSETS / "layout.json"
+# the HUD textures whose bitmaps Halo Custom Edition lays out alike
+CUSTOM_EDITION_HUD = HUD_ASSETS / "custom_edition.json"
 TITLE_ASSETS = Path("port/assets/titles")
 TITLE_LIST = TITLE_ASSETS / "titles.json"
 BUTTON_ASSETS = Path("port/assets/buttons")
@@ -48,6 +50,8 @@ SMAA_FILES = (("SMAA.hlsl", "xgpu_smaa_shader"), ("area_tex.zlib", "xgpu_smaa_ar
               ("search_tex.zlib", "xgpu_smaa_search_texture"))
 # the desktop windows' icon (tools/app_icon.py; port/linux/src/sdl_platform.c)
 WINDOW_ICON = Path("port/assets/icon/opence-icon-256.png")
+# the pointer the menus show in place of the system's (port/linux/src/sdl_platform.c)
+MENU_CURSOR = Path("port/assets/cursor/menu_cursor.png")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
@@ -85,12 +89,13 @@ def smaa_files() -> List[tuple]:
 
 def hud_asset_inputs() -> List[Path]:
     """The files the generated source is made from."""
-    inputs = [listing for listing in (LAYOUT, TITLE_LIST, BUTTON_LIST, FONT_LIST, MENU_LIST)
+    inputs = [listing for listing in (LAYOUT, CUSTOM_EDITION_HUD, TITLE_LIST, BUTTON_LIST, FONT_LIST, MENU_LIST)
               if (ROOT / listing).is_file()]
     return [*inputs, *(folder / f"{asset['name']}.png" for folder, asset, _ in textures()),
             *(FONT_ASSETS / name for name in font_files()), *(MENU_ASSETS / name for name in menu_files()),
             *(SMAA_ASSETS / name for name, _ in smaa_files()),
-            *([WINDOW_ICON] if (ROOT / WINDOW_ICON).is_file() else [])]
+            *([WINDOW_ICON] if (ROOT / WINDOW_ICON).is_file() else []),
+            *([MENU_CURSOR] if (ROOT / MENU_CURSOR).is_file() else [])]
 
 
 def hud_configure_inputs() -> List[Path]:
@@ -150,6 +155,10 @@ def main() -> None:
         "",
     ]
     table = []
+    custom_edition = set()
+    if (ROOT / CUSTOM_EDITION_HUD).is_file():
+        custom_edition = {(entry["tag"], entry["bitmap"])
+                          for entry in json.loads((ROOT / CUSTOM_EDITION_HUD).read_text())["assets"]}
     for index, (folder, asset, title) in enumerate(textures()):
         name = f"{asset['name']}.png"
         data = (ROOT / folder / name).read_bytes()
@@ -170,7 +179,8 @@ def main() -> None:
             sys.exit(f"{name}: sprite sequences must be 0 to 31 (hud_hires.h: sprites)")
         sprites = sum(1 << sequence for sequence in sequences)
         table.append(f'\t{{ "{tag}", {asset["bitmap"]}, {width}, {height}, 0x{asset["crc"]:08x}u, {coverage}, '
-                     f'{point_threshold}, {int(title)}, 0x{sprites:x}u, asset{index}, {len(data)} }},')
+                     f'{point_threshold}, {int(title)}, 0x{sprites:x}u, '
+                     f'{int((asset["tag"], asset["bitmap"]) in custom_edition)}, asset{index}, {len(data)} }},')
     lines.append("const struct hud_hires_embedded hud_hires_embedded[] =")
     lines.append("{")
     lines.extend(table)
@@ -244,6 +254,13 @@ def main() -> None:
     lines.extend(words(data) if data else ["\t0,"])
     lines.append("};")
     lines.append(f"const unsigned long platform_window_icon_size = {len(data)};")
+    # the menus' pointer, a PNG (of size 0 where the checkout has none)
+    data = (ROOT / MENU_CURSOR).read_bytes() if (ROOT / MENU_CURSOR).is_file() else b""
+    lines.append("")
+    lines.append("const unsigned int platform_menu_cursor[] = {")
+    lines.extend(words(data) if data else ["\t0,"])
+    lines.append("};")
+    lines.append(f"const unsigned long platform_menu_cursor_size = {len(data)};")
     lines.append("")
     lines.append("#endif")
     output = Path(sys.argv[1])
