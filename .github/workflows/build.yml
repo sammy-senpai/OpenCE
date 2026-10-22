@@ -14,7 +14,7 @@ permissions:
 
 env:
   CI_COMPILER_LAUNCHER: ccache
-  CCACHE_DIR: ${{ github.workspace }}.ccache
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
   CCACHE_BASEDIR: ${{ github.workspace }}
   CCACHE_MAXSIZE: 1G
 
@@ -26,8 +26,8 @@ jobs:
       - name: Install the toolchain
         run: |
           mkdir -p "$RUNNER_TEMP/tools"
-          curl -fsSL -o ninja.zip https:github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
-          curl -fsSL -o ccache.tar.xz https:github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          curl -fsSL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
           sha256sum -c - <<'EOF'
           6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
           80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
@@ -137,7 +137,6 @@ jobs:
           name: halo-android-zips
           path: dist
 
-      # GitHub Release tag uses the hyphen format: build-5
       - name: Create Release and Upload Assets
         uses: softprops/action-gh-release@v2
         with:
