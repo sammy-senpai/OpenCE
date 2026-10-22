@@ -38,7 +38,7 @@ final class TouchLayout {
 
     private static final float GRID_WIDTH = 960;
     private static final float GRID_HEIGHT = 540;
-    private static final int VERSION = 6;
+    private static final int VERSION = 3;
     private static final int MAX_FILE_LENGTH = 65536;
 
     private static final float[][] DEFAULTS = {
@@ -129,9 +129,9 @@ final class TouchLayout {
 
     float radius(int control) {
         int t = type(control);
-        float baseR = (t == LEFT) ? STICK_BASE_RADIUS : BUTTON_BASE_RADIUS;
+        float baseR = (t >= 0 && t < RADII.length) ? RADII[t] : BUTTON_BASE_RADIUS;
         float scaled = baseR * sizeScale(control);
-        return Math.max(scaled, (t == LEFT) ? 24f : 10f);
+        return Math.max(scaled, Math.max(minimumRadius, (t == LEFT) ? 24f : 10f));
     }
 
     float sizeScale(int control) { return controls.get(control).size; }
@@ -200,7 +200,7 @@ final class TouchLayout {
         }
 
         controls.clear();
-        for (int i = 0; i < DEFAULTS.length; i++) {
+        for (int i = 0; i < BASE_COUNT; i++) {
             Control c = new Control(i, DEFAULTS[i][0] * width / GRID_WIDTH, DEFAULTS[i][1] * height / GRID_HEIGHT);
             if (!resetIcons && i < icons.size()) {
                 c.iconFile = icons.get(i);
@@ -215,12 +215,6 @@ final class TouchLayout {
     void resetSingleControl(int control, boolean resetIcon) {
         if (control < 0 || control >= controls.size()) return;
         Control c = controls.get(control);
-        /*int t = c.type;
-        if (t >= 0 && t < DEFAULTS.length) {
-            c.x = DEFAULTS[t][0] * width / GRID_WIDTH;
-            c.y = DEFAULTS[t][1] * height / GRID_HEIGHT;
-        }
-        c.size = 1f;*/
         c.opacity = -1f;
         c.shown = true;
         c.mode = MODE_STANDARD;
@@ -309,7 +303,7 @@ final class TouchLayout {
         controls.get(control).x = Math.max(r, Math.min(width - r, x));
         controls.get(control).y = Math.max(r, Math.min(height - r, y));
     }
-
+    
     void restore(int control, float x, float y) {
         if (!Float.isFinite(x) || !Float.isFinite(y) || x < 0 || x > GRID_WIDTH || y < 0 || y > GRID_HEIGHT)
             return;
@@ -318,13 +312,12 @@ final class TouchLayout {
         Control c = controls.get(control);
         c.x = x * width / GRID_WIDTH;
         c.y = y * height / GRID_HEIGHT;
-        move(control, c.x, c.y);
     }
-
+    
     void restore(int control, float x, int y) {
         restore(control, x, (float) y);
     }
-
+    
     void restore(int control, int x, int y) {
         restore(control, (float) x, (float) y);
     }
@@ -401,8 +394,17 @@ final class TouchLayout {
             if (tint != null && !tint.trim().isEmpty()) {
                 layout.pressTint = tint.trim();
             }
-            for (int i = 0; i < count; i++)
-                layout.controls.add(readControl(values, i, version));
+            int leftCount = 0;
+            for (int i = 0; i < count; i++) {
+                Control c = readControl(values, i, version);
+                if (c.type == LEFT) {
+                    leftCount++;
+                }
+                layout.controls.add(c);
+            }
+            if (leftCount > 1) {
+                throw new IllegalArgumentException("Multiple movement sticks not allowed");
+            }
             if (count < TOTAL_TYPES) {
                 for (int i = count; i < TOTAL_TYPES; i++)
                     layout.controls.add(new Control(i, DEFAULTS[i][0] * layout.width / GRID_WIDTH, DEFAULTS[i][1] * layout.height / GRID_HEIGHT));
