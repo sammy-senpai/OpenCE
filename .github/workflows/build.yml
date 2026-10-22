@@ -40,8 +40,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Safely update versionName to "build X" and versionCode to X using Python
-      - name: Inject Custom Version into Gradle
+      # Directly inject "build X" (with a space) into build.gradle, bypassing git describe limits
+      - name: Inject Version into Gradle
         env:
           RUN_NUM: ${{ github.run_number }}
         run: |
@@ -52,14 +52,14 @@ jobs:
           if os.path.exists(gradle_path):
               with open(gradle_path, "r") as f:
                   content = f.read()
-              # Safely replace versionName and versionCode without touching math functions
-              content = re.sub(r"versionName\s+([\"\x27]).*?\1", f"versionName \"build {run_num}\"", content)
-              content = re.sub(r"versionCode\s+\d+", f"versionCode {run_num}", content)
+              # Directly override versionName and versionCode
+              content = re.sub(r"versionName\s+[^\n]+", f"versionName \"build {run_num}\"", content)
+              content = re.sub(r"versionCode\s+[^\n]+", f"versionCode {run_num}", content)
               with open(gradle_path, "w") as f:
                   f.write(content)
-              print(f"Successfully updated {gradle_path} to build {run_num}")
+              print(f"Successfully set app version to 'build {run_num}' and code to {run_num}")
           else:
-              print(f"Warning: {gradle_path} not found")
+              print(f"Error: {gradle_path} not found")
           '
 
       - uses: actions/cache@v4
