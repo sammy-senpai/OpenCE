@@ -130,8 +130,10 @@ final class TouchLayout {
     float radius(int control) {
         int t = type(control);
         float baseR = (t >= 0 && t < RADII.length) ? RADII[t] : BUTTON_BASE_RADIUS;
-        float scaled = baseR * sizeScale(control);
-        return Math.max(scaled, Math.max(minimumRadius, (t == LEFT) ? 24f : 10f));
+        // Apply minimum radius to the base size, allowing users to scale freely above/below it
+        float effectiveBaseR = Math.max(baseR, minimumRadius);
+        float scaled = effectiveBaseR * sizeScale(control);
+        return Math.max(scaled, (t == LEFT) ? 24f : 10f);
     }
 
     float sizeScale(int control) { return controls.get(control).size; }
