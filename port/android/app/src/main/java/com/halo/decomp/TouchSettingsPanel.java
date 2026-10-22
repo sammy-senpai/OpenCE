@@ -14,7 +14,6 @@ import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -31,6 +30,7 @@ import java.util.Locale;
 public class TouchSettingsPanel extends ScrollView {
     private static final int ACCENT = 0xFF4FC3F7;
     private static final int DELETE_COLOR = 0xFFFF5252;
+    private static final String DEFAULT_TINT = "#4FC3F7";
 
     private final TouchControls controls;
     private final float density;
@@ -44,6 +44,7 @@ public class TouchSettingsPanel extends ScrollView {
     private final Switch rumbleSwitch, gyroSwitch, floatStickSwitch;
     private final SeekBar masterOpacityBar, lookBar;
     private final TextView masterOpacityValue, lookValue;
+    private final TextView globalPressTintPill;
 
     // Button-Specific Section Container
     private final LinearLayout buttonSection;
@@ -82,7 +83,6 @@ public class TouchSettingsPanel extends ScrollView {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(14), dp(10), dp(14), dp(14));
 
-        // Header: Drag handle title + Reset button
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
@@ -105,7 +105,7 @@ public class TouchSettingsPanel extends ScrollView {
         statusSummaryText.setPadding(0, 0, 0, dp(6));
         layout.addView(statusSummaryText);
 
-        // ================= GLOBAL SECTION (Shown when NO button is selected) =================
+        // ================= GLOBAL SECTION =================
         globalSection = new LinearLayout(context);
         globalSection.setOrientation(LinearLayout.VERTICAL);
 
@@ -133,6 +133,19 @@ public class TouchSettingsPanel extends ScrollView {
         globalSection.addView(row("Master Opacity", masterOpacityBar, masterOpacityValue));
         globalSection.addView(row("Look Speed", lookBar, lookValue));
 
+        // Universal Press Tint pill in Global Section
+        LinearLayout tintRow = new LinearLayout(context);
+        tintRow.setOrientation(LinearLayout.HORIZONTAL);
+        tintRow.setGravity(Gravity.CENTER_VERTICAL);
+        tintRow.setPadding(0, dp(4), 0, dp(4));
+
+        TextView tintLabel = text("Universal Press Tint", 11, false, 0xFFFFFFFF);
+        globalPressTintPill = pill("Tint: Default", false);
+
+        tintRow.addView(tintLabel, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        tintRow.addView(globalPressTintPill);
+        globalSection.addView(tintRow);
+
         LinearLayout addRow = new LinearLayout(context);
         addRow.setOrientation(LinearLayout.HORIZONTAL);
         addRow.setPadding(0, dp(6), 0, dp(4));
@@ -147,7 +160,7 @@ public class TouchSettingsPanel extends ScrollView {
 
         layout.addView(globalSection);
 
-        // ================= BUTTON SECTION (Shown when a specific button IS selected) =================
+        // ================= BUTTON SECTION =================
         buttonSection = new LinearLayout(context);
         buttonSection.setOrientation(LinearLayout.VERTICAL);
 
@@ -176,9 +189,14 @@ public class TouchSettingsPanel extends ScrollView {
         rowKeys.setOrientation(LinearLayout.HORIZONTAL);
         pressKeyPill = pill("Tap: ...", false);
         longPressKeyPill = pill("Hold: ...", false);
-        rowKeys.addView(pressKeyPill, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        
+        // Use a variable layout params for pressKeyPill so we can toggle the margin
+        LinearLayout.LayoutParams pressParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        rowKeys.addView(pressKeyPill, pressParams);
+        
+        LinearLayout.LayoutParams holdParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         rowKeys.addView(spacing(dp(6)));
-        rowKeys.addView(longPressKeyPill, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        rowKeys.addView(longPressKeyPill, holdParams);
 
         stateBindingsContainer.addView(rowKeys);
         buttonSection.addView(stateBindingsContainer, margin(0, dp(6), 0, 0));
@@ -193,21 +211,20 @@ public class TouchSettingsPanel extends ScrollView {
         deletePill = pill("Delete", false);
         styleDangerPill(deletePill);
 
-        iconPill.setSingleLine(true);
-        iconPill.setEllipsize(TextUtils.TruncateAt.MIDDLE);
-
         renamePill.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        
+        // Flexible weight for the skin/base pill
         LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         iconParams.setMargins(dp(4), 0, dp(4), 0);
         iconPill.setLayoutParams(iconParams);
+        
         stickKnobPill.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         deletePill.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         customRow.addView(renamePill);
         customRow.addView(iconPill);
         customRow.addView(stickKnobPill);
-        customRow.addView(spacing(dp(4)));
-        customRow.addView(deletePill);
+        customRow.addView(deletePill); // Removed spacing view here
         buttonSection.addView(customRow, margin(0, dp(6), 0, 0));
 
         layout.addView(buttonSection);
@@ -230,9 +247,7 @@ public class TouchSettingsPanel extends ScrollView {
 
         addView(layout);
 
-        saveBtn.setOnClickListener(v -> {
-            controls.stopEditing();
-        });
+        saveBtn.setOnClickListener(v -> controls.stopEditing());
 
         exportBtn.setOnClickListener(v -> ((HaloActivity) getContext()).chooseLayoutFile(true, controls.exportLayout()));
         importBtn.setOnClickListener(v -> ((HaloActivity) getContext()).chooseLayoutFile(false, controls.exportLayout()));
@@ -354,6 +369,7 @@ public class TouchSettingsPanel extends ScrollView {
         renamePill.setOnClickListener(v -> showRenameDialog());
         iconPill.setOnClickListener(v -> showCategorizedIconDialog(false));
         stickKnobPill.setOnClickListener(v -> showCategorizedIconDialog(true));
+        globalPressTintPill.setOnClickListener(v -> showPressTintPickerDialog());
 
         refresh();
     }
@@ -461,7 +477,12 @@ public class TouchSettingsPanel extends ScrollView {
         for (int i = 0; i < controls.getLayout().size(); i++) {
             if (!controls.getLayout().shown(i)) {
                 hiddenIndices.add(i);
-                hiddenNames.add(controls.controlName(controls.getLayout().type(i)));
+                String customLbl = controls.getLayout().customLabel(i);
+                if (customLbl != null && !customLbl.trim().isEmpty()) {
+                    hiddenNames.add(customLbl.trim());
+                } else {
+                    hiddenNames.add(controls.controlName(controls.getLayout().type(i)));
+                }
             }
         }
 
@@ -471,7 +492,7 @@ public class TouchSettingsPanel extends ScrollView {
         }
 
         new AlertDialog.Builder(getContext())
-            .setTitle("Unhide Button")
+            .setTitle("Select the button to unhide")
             .setItems(hiddenNames.toArray(new String[0]), (d, which) -> {
                 int target = hiddenIndices.get(which);
                 controls.getLayout().setShown(target, true);
@@ -484,7 +505,6 @@ public class TouchSettingsPanel extends ScrollView {
             .show();
     }
 
-    // Direct, single confirmation without icon questions
     private void handleSmartReset() {
         final int sel = getActiveControl();
         if (sel >= 0 && sel < controls.getLayout().size()) {
@@ -536,11 +556,13 @@ public class TouchSettingsPanel extends ScrollView {
                 } else if (which == 1) {
                     showCustomKeycodeDialog(sel, forHold);
                 } else {
+                    // Properly clear / reset action and keycode mappings
                     if (forHold) {
                         controls.getLayout().setLongType(sel, -1);
                         controls.getLayout().setLongKeycode(sel, -1);
                     } else {
                         controls.getLayout().setCustomKeycode(sel, -1);
+                        controls.getLayout().setType(sel, TouchLayout.TYPE_CUSTOM);
                     }
                     controls.saveAndInvalidate();
                     refresh();
@@ -593,8 +615,11 @@ public class TouchSettingsPanel extends ScrollView {
                 } catch (NumberFormatException ignored) {}
             })
             .setNeutralButton("Clear", (d, which) -> {
-                if (forHold) controls.getLayout().setLongKeycode(sel, -1);
-                else controls.getLayout().setCustomKeycode(sel, -1);
+                if (forHold) {
+                    controls.getLayout().setLongKeycode(sel, -1);
+                } else {
+                    controls.getLayout().setCustomKeycode(sel, -1);
+                }
                 controls.saveAndInvalidate();
                 refresh();
             })
@@ -609,7 +634,7 @@ public class TouchSettingsPanel extends ScrollView {
         String[] categories = {
             "Default Icons (Built-in)",
             "Custom Icons (Data Folder)",
-            "Reset to Default"
+            "Clear / None"
         };
 
         new AlertDialog.Builder(getContext())
@@ -635,10 +660,10 @@ public class TouchSettingsPanel extends ScrollView {
             "Controls Toggle (Show / Hide)", "Joystick Base Ring", "Joystick Knob (Nub)"
         };
         final String[] resourceKeys = {
-            "tc_ic_a", "tc_ic_b", "tc_ic_x", "tc_ic_y",
-            "tc_ic_rt", "tc_ic_lt", "tc_ic_ls", "tc_ic_rs",
-            "tc_ic_white", "tc_ic_black", "tc_ic_start", "tc_ic_back",
-            "tc_ic_hide", "tc_stick_base", "tc_stick_knob"
+            "tc_a_jump", "tc_b_melee", "tc_x_reload", "tc_y_weapon",
+            "tc_fire", "tc_grenade", "tc_crouch", "tc_zoom",
+            "tc_flash", "tc_grenade_type", "tc_menu", "tc_back",
+            "tc_gamepad", "tc_joystick_base", "tc_joystick_knob"
         };
 
         new AlertDialog.Builder(getContext())
@@ -676,6 +701,56 @@ public class TouchSettingsPanel extends ScrollView {
         controls.refreshAllDrawables();
         controls.saveAndInvalidate();
         refresh();
+    }
+
+    private void showPressTintPickerDialog() {
+        String[] colorOptions = {
+            "Default",
+            "Custom Hex Code..."
+        };
+
+        new AlertDialog.Builder(getContext())
+            .setTitle("Universal Press Tint (75% Opacity)")
+            .setItems(colorOptions, (d, which) -> {
+                if (which == 0) {
+                    controls.getLayout().pressTint = DEFAULT_TINT;
+                    controls.saveAndInvalidate();
+                    refresh();
+                } else if (which == 1) {
+                    showCustomHexTintDialog();
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void showCustomHexTintDialog() {
+        final EditText input = new EditText(getContext());
+        input.setHint("#RRGGBB (e.g. #00E5FF)");
+        String current = controls.getLayout().pressTint;
+        if (current != null && !current.equalsIgnoreCase(DEFAULT_TINT)) {
+            input.setText(current);
+        }
+
+        new AlertDialog.Builder(getContext())
+            .setTitle("Custom Hex Tint")
+            .setView(input)
+            .setPositiveButton("Apply", (d, which) -> {
+                String hex = input.getText().toString().trim();
+                if (!hex.startsWith("#")) {
+                    hex = "#" + hex;
+                }
+                try {
+                    Color.parseColor(hex);
+                    controls.getLayout().pressTint = hex;
+                    controls.saveAndInvalidate();
+                    refresh();
+                } catch (IllegalArgumentException e) {
+                    Toast.makeText(getContext(), "Invalid hex color code. Use format #RRGGBB", Toast.LENGTH_LONG).show();
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 
     private void showRenameDialog() {
@@ -732,6 +807,13 @@ public class TouchSettingsPanel extends ScrollView {
         masterOpacityBar.setProgress(Math.round((controls.getLayout().opacity - TouchLayout.MIN_OPACITY) * 100f));
         lookBar.setProgress(Math.round((controls.getSensitivity() - TouchLayout.MIN_SENSITIVITY) * 100f));
 
+        String currentTint = controls.getLayout().pressTint;
+        if (currentTint == null || currentTint.trim().isEmpty() || currentTint.equalsIgnoreCase(DEFAULT_TINT)) {
+            globalPressTintPill.setText("Tint: Default");
+        } else {
+            globalPressTintPill.setText("Tint: " + currentTint);
+        }
+
         boolean isStick = hasSelectedButton && controls.getLayout().type(sel) == TouchLayout.LEFT;
         boolean isHideBtn = hasSelectedButton && controls.getLayout().type(sel) == TouchLayout.TB_HIDE;
         boolean isGameplayButton = hasSelectedButton && !isStick && !isHideBtn;
@@ -748,18 +830,50 @@ public class TouchSettingsPanel extends ScrollView {
         iconPill.setVisibility(hasSelectedButton ? VISIBLE : GONE);
         deletePill.setVisibility(hasSelectedButton && !isHideBtn ? VISIBLE : GONE);
 
+        // Dynamically adjust iconPill and deletePill layout params to fix spacing
+        if (hasSelectedButton) {
+            LinearLayout.LayoutParams iconParams = (LinearLayout.LayoutParams) iconPill.getLayoutParams();
+            LinearLayout.LayoutParams deleteParams = (LinearLayout.LayoutParams) deletePill.getLayoutParams();
+            
+            if (isStick) {
+                // Joystick has no rename pill on its left, clear left margin
+                iconParams.setMargins(0, 0, dp(4), 0);
+                // Give delete pill a proper left margin since knob skin is beside it
+                deleteParams.setMargins(dp(4), 0, 0, 0);
+            } else {
+                // Regular buttons have rename pill on the left, keep proper spacing
+                iconParams.setMargins(dp(4), 0, dp(4), 0);
+                // Regular buttons have weight on skin pill, so delete pill needs 0 left margin to avoid double spacing
+                deleteParams.setMargins(0, 0, 0, 0);
+            }
+            iconPill.setLayoutParams(iconParams);
+            deletePill.setLayoutParams(deleteParams);
+        }
+
         if (isGameplayButton) {
             int mode = controls.getLayout().mode(sel);
+            LinearLayout.LayoutParams pressParams = (LinearLayout.LayoutParams) pressKeyPill.getLayoutParams();
+            
             if (mode == TouchLayout.MODE_STANDARD) {
                 modePill.setText("Mode: Standard");
                 longPressKeyPill.setVisibility(GONE);
+                pressParams.width = LinearLayout.LayoutParams.MATCH_PARENT; // Take full width
+                pressParams.weight = 0f;
+                pressParams.setMargins(0, 0, 0, 0);
             } else if (mode == TouchLayout.MODE_TAP_AND_HOLD) {
                 modePill.setText("Mode: Tap + Hold");
                 longPressKeyPill.setVisibility(VISIBLE);
+                pressParams.width = 0; // Share width 50/50 with weight
+                pressParams.weight = 1f;
+                pressParams.setMargins(0, 0, 0, 0);
             } else {
                 modePill.setText("Mode: Toggle");
                 longPressKeyPill.setVisibility(GONE);
+                pressParams.width = LinearLayout.LayoutParams.MATCH_PARENT; // Take full width
+                pressParams.weight = 0f;
+                pressParams.setMargins(0, 0, 0, 0);
             }
+            pressKeyPill.setLayoutParams(pressParams);
 
             int ck = controls.getLayout().customKeycode(sel);
             int primaryType = controls.getLayout().type(sel);
@@ -767,6 +881,8 @@ public class TouchSettingsPanel extends ScrollView {
             String primaryStr;
             if (ck > 0) {
                 primaryStr = KeyEvent.keyCodeToString(ck) + " (" + ck + ")";
+            } else if (primaryType == TouchLayout.TYPE_CUSTOM) {
+                primaryStr = "None";
             } else {
                 primaryStr = controls.controlName(primaryType);
             }
@@ -787,7 +903,7 @@ public class TouchSettingsPanel extends ScrollView {
 
         if (hasSelectedButton) {
             String iconFile = controls.getLayout().iconFile(sel);
-            String cleanIconName = iconFile.startsWith("tc_ic_") ? iconFile.substring(6).toUpperCase(Locale.US) : iconFile;
+            String cleanIconName = iconFile.startsWith("tc_") ? iconFile.substring(3).toUpperCase(Locale.US) : iconFile;
             if (isStick) {
                 iconPill.setText(iconFile.isEmpty() ? "Base Skin: Default" : "Base: " + cleanIconName);
             } else {
