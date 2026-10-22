@@ -200,7 +200,8 @@ final class TouchLayout {
         }
 
         controls.clear();
-        for (int i = 0; i < BASE_COUNT; i++) {
+        // Initialize all 19 controls (0 to 18), ensuring TB_HIDE is present
+        for (int i = 0; i < TOTAL_TYPES; i++) {
             Control c = new Control(i, DEFAULTS[i][0] * width / GRID_WIDTH, DEFAULTS[i][1] * height / GRID_HEIGHT);
             if (!resetIcons && i < icons.size()) {
                 c.iconFile = icons.get(i);
