@@ -1,16 +1,7 @@
 name: Build
 
 # Debug and release builds of the Android port for every pushed commit,
-# uploaded as artifacts.
-# tools/ci_build.py does each build; see it for the options.
-#
-# Kept cheap:
-# - compiles go through ccache, whose cache carries over from run to run, so
-#   a commit only recompiles what it changed; downloads (musl, Gradle, etc.)
-#   are cached too;
-# - a newer push to the same branch cancels a run still going;
-# - pushes that only change documentation do not build;
-# - artifacts are kept for three days.
+# uploaded as artifacts and published as a GitHub Release.
 on:
   workflow_dispatch:
 
@@ -19,26 +10,24 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write # Required to create tags, GitHub Releases, and upload assets
 
 env:
   CI_COMPILER_LAUNCHER: ccache
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_DIR: ${{ github.workspace }}.ccache
   CCACHE_BASEDIR: ${{ github.workspace }}
   CCACHE_MAXSIZE: 1G
 
 jobs:
   android:
-    # The runner image has the Android SDK and NDK, a JDK and CMake.
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - name: Install the toolchain
         run: |
           mkdir -p "$RUNNER_TEMP/tools"
-          # (each download checked against the hash it had when it was pinned)
-          curl -fsSL -o ninja.zip https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
-          curl -fsSL -o ccache.tar.xz https://github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
+          curl -fsSL -o ninja.zip https:github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip
+          curl -fsSL -o ccache.tar.xz https:github.com/ccache/ccache/releases/download/v4.10.2/ccache-4.10.2-linux-x86_64.tar.xz
           sha256sum -c - <<'EOF'
           6f98805688d19672bd699fbbfa2c2cf0fc054ac3df1f0e6a47664d963d530255  ninja.zip
           80cab87bd510eca796467aee8e663c398239e0df1c4800a0b5dff11dca0b4f18  ccache.tar.xz
@@ -48,6 +37,21 @@ jobs:
           echo "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Explicitly inject "build X" (with a space) into the app files, 
+      # and use the run number as the numeric versionCode.
+      - name: Inject Custom Version into Gradle
+        run: |
+          RUN_NUM="${{ github.run_number }}"
+          echo "Setting app version name to 'build $RUN_NUM' and version code to $RUN_NUM"
+          find . -name "build.gradle*" -type f | while read -r file; do
+            sed -i 's/versionName\s*=\s*"[^"]*"/versionName "build '"$RUN_NUM"'"/g' "$file" || true
+            sed -i 's/versionName\s*"[^"]*"/versionName "build '"$RUN_NUM"'"/g' "$file" || true
+            sed -i 's/versionCode\s*=\s*[0-9]*/versionCode '"$RUN_NUM"'/g' "$file" || true
+            sed -i 's/versionCode\s*[0-9]*/versionCode '"$RUN_NUM"'/g' "$file" || true
+          done
 
       - uses: actions/cache@v4
         with:
@@ -55,7 +59,6 @@ jobs:
           key: ccache-android-${{ github.sha }}
           restore-keys: ccache-android-
 
-      # musl and SDL, which configure.py fetches
       - uses: actions/cache@v4
         with:
           path: build/android/third_party
@@ -68,11 +71,6 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ hashFiles('port/android/**/*.gradle*', 'port/android/gradle/wrapper/gradle-wrapper.properties') }}
 
-      # the app's signing key, from the ANDROID_KEYSTORE_BASE64 secret (a
-      # keystore, base64) and ANDROID_KEYSTORE_PASSWORD (its password, and
-      # the key's, alias halo): every build signed with it installs over the
-      # one before, as the app's self-updater (Updater.java) needs. Without
-      # them each build is signed with the runner's own debug key.
       - name: Signing key
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -84,22 +82,26 @@ jobs:
             echo "::warning::no ANDROID_KEYSTORE_BASE64 secret: the Android builds cannot update over each other"
           fi
 
-      - name: Debug
+      - name: Debug Build
         env:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android debug
 
-      - name: Release
+      - name: Release Build
         env:
           HALO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: python3 tools/ci_build.py android release
 
-      # the touch controls' layout and gyroscope maths (the runner's JDK)
       - name: Test the touch layout
         run: python3 tools/test_touch_layout.py
 
       - name: Compile cache
         run: ccache --show-stats
+
+      - name: Package artifacts into zips
+        run: |
+          cd dist/halo-android-debug && zip -r ../halo-android-debug.zip . && cd -
+          cd dist/halo-android-release && zip -r ../halo-android-release.zip . && cd -
 
       - uses: actions/upload-artifact@v4
         with:
@@ -113,9 +115,40 @@ jobs:
           path: dist/halo-android-release
           retention-days: 3
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: halo-android-zips
+          path: |
+            dist/halo-android-debug.zip
+            dist/halo-android-release.zip
+          retention-days: 3
+
+  release:
+    needs: [android]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: halo-android-zips
+          path: dist
+
+      # GitHub Release tag uses the hyphen format: build-5
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Build ${{ github.run_number }}"
+          files: |
+            dist/halo-android-debug.zip
+            dist/halo-android-release.zip
+          generate_release_notes: true
+
   notify:
-    # A Discord embed for the run, to the DISCORD_WEBHOOK secret (nothing
-    # without it): green when Android built successfully, red when it did not.
     needs: [android]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
@@ -163,12 +196,6 @@ jobs:
                 {name: "Android", value: $android, inline: true}
               ]
             }]}' > payload.json
-          # Discord rate limits webhooks (HTTP 429, with how many seconds to
-          # wait in retry_after): wait and try again, a few times. A post
-          # still limited, or a network or Discord error, is a warning rather
-          # than a failed run; any other answer (a deleted webhook) fails. (At
-          # most 5 tries of 15 seconds and 4 waits of 30: inside the job's 5
-          # minutes.)
           for attempt in 1 2 3 4 5; do
             code=$(curl -sS --max-time 15 -o response.json -w '%{http_code}' \
               -H "Content-Type: application/json" -d @payload.json "$WEBHOOK") || code=000
