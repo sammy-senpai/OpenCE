@@ -941,8 +941,19 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
         List<String> list = new ArrayList<>();
         File baseDir = getExternalFilesDirectory();
         File iconsDir = new File(baseDir, "icons");
-        if (iconsDir.exists() && iconsDir.isDirectory())
-            collectImages(iconsDir, list, "icons/");
+        if (iconsDir.exists() && iconsDir.isDirectory()) {
+            File[] files = iconsDir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    if (!f.isDirectory()) {
+                        String n = f.getName().toLowerCase(Locale.US);
+                        if (n.endsWith(".png") || n.endsWith(".webp") || n.endsWith(".jpg")) {
+                            list.add(f.getName()); // Adds just the filename without "icons/" prefix
+                        }
+                    }
+                }
+            }
+        }
         Collections.sort(list);
         return list;
     }
@@ -956,10 +967,10 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
             collectImages(iconsDir, list, "icons/");
 
         String[] builtins = {
-            "tc_ic_a", "tc_ic_b", "tc_ic_x", "tc_ic_y",
-            "tc_ic_rt", "tc_ic_lt", "tc_ic_ls", "tc_ic_rs",
-            "tc_ic_white", "tc_ic_black", "tc_ic_start", "tc_ic_back",
-            "tc_ic_hide", "tc_stick_base", "tc_stick_knob"
+            "tc_a_jump", "tc_b_melee", "tc_x_reload", "tc_y_weapon",
+            "tc_fire", "tc_grenade", "tc_crouch", "tc_zoom",
+            "tc_flash", "tc_grenade_type", "tc_menu", "tc_back",
+            "tc_gamepad", "tc_joystick_base", "tc_joystick_knob"
         };
         for (String b : builtins) {
             int id = getContext().getResources().getIdentifier(b, "drawable", getContext().getPackageName());
@@ -1011,8 +1022,8 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
         resourceName = resourceName.toLowerCase(Locale.US).replace("-", "_").replace(" ", "_");
 
         int resId = getContext().getResources().getIdentifier(resourceName, "drawable", getContext().getPackageName());
-        if (resId == 0 && !resourceName.startsWith("tc_ic_")) {
-            resId = getContext().getResources().getIdentifier("tc_ic_" + resourceName, "drawable", getContext().getPackageName());
+        if (resId == 0 && !resourceName.startsWith("tc_")) {
+            resId = getContext().getResources().getIdentifier("tc_" + resourceName, "drawable", getContext().getPackageName());
         }
 
         if (resId != 0) {
@@ -1038,8 +1049,8 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
                 break;
             }
         }
-        if (stickBaseDrawable == null) stickBaseDrawable = loadExternalDrawable("tc_stick_base.png");
-        if (stickKnobDrawable == null) stickKnobDrawable = loadExternalDrawable("tc_stick_knob.png");
+        if (stickBaseDrawable == null) stickBaseDrawable = loadExternalDrawable("tc_joystick_base.png");
+        if (stickKnobDrawable == null) stickKnobDrawable = loadExternalDrawable("tc_joystick_knob.png");
         invalidate();
     }
 
@@ -1109,30 +1120,89 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
 
     private void drawGraphicButton(Canvas canvas, float x, float y, float radius, String label,
                                    boolean active, boolean toggled, float textSize, float op, Drawable customIcon) {
+        
+        float effectiveRadius = (active || toggled) ? radius * 0.92f : radius;
+        String pressTintHex = layout.pressTint;
+
+        // If it's a PNG resource icon, render it transparently with a thin, crisp 25% opacity contour stroke
         if (customIcon != null) {
-            customIcon.setBounds((int)(x - radius), (int)(y - radius), (int)(x + radius), (int)(y + radius));
-            customIcon.setAlpha((int)(op * 255));
+            customIcon.setBounds((int)(x - effectiveRadius), (int)(y - effectiveRadius), 
+                                 (int)(x + effectiveRadius), (int)(y + effectiveRadius));
+            
+            // Draw a thinner contour outline with 25% opacity
+            float strokeWidth = 0.75f * scale; // Thinner stroke width
+            for (float angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                float ox = x + (float)Math.cos(angle) * strokeWidth;
+                float oy = y + (float)Math.sin(angle) * strokeWidth;
+                customIcon.setBounds((int)(ox - effectiveRadius), (int)(oy - effectiveRadius), 
+                                     (int)(ox + effectiveRadius), (int)(oy + effectiveRadius));
+                
+                // 64 alpha = 25% opacity
+                int strokeAlpha = (int)(Math.min(op, 1f) * 64);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    customIcon.setColorFilter(new android.graphics.BlendModeColorFilter(
+                        Color.argb(strokeAlpha, 0, 0, 0), android.graphics.BlendMode.SRC_IN));
+                } else {
+                    customIcon.setColorFilter(Color.argb(strokeAlpha, 0, 0, 0), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+                customIcon.draw(canvas);
+            }
+
+            // Draw crisp white/tinted primary icon on top
+            if ((active || toggled) && pressTintHex != null && !pressTintHex.trim().isEmpty()) {
+                try {
+                    int parsedColor = Color.parseColor(pressTintHex);
+                    int tintedColor = (parsedColor & 0x00FFFFFF) | (Math.round(255 * 0.75f * op) << 24);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        customIcon.setColorFilter(new android.graphics.BlendModeColorFilter(
+                            (parsedColor & 0x00FFFFFF) | (Math.round(255 * 0.75f) << 24), 
+                            android.graphics.BlendMode.SRC_IN));
+                    } else {
+                        customIcon.setColorFilter(tintedColor, android.graphics.PorterDuff.Mode.SRC_IN);
+                    }
+                } catch (Exception e) {
+                    customIcon.setColorFilter(null);
+                    customIcon.setAlpha((int)(op * 255));
+                }
+            } else {
+                customIcon.setColorFilter(null);
+                customIcon.setAlpha((int)(op * 255));
+            }
+
+            customIcon.setBounds((int)(x - effectiveRadius), (int)(y - effectiveRadius), 
+                                 (int)(x + effectiveRadius), (int)(y + effectiveRadius));
             customIcon.draw(canvas);
             return;
         }
 
-        paint.setStyle(Paint.Style.FILL);
-        int centerColor = active ? applyAlpha(0xFF00E5FF, op * 0.75f) : (toggled ? applyAlpha(0xFF0091EA, op * 0.65f) : applyAlpha(0xFF141E28, op * 0.70f));
-        int edgeColor = active ? applyAlpha(0xFF0091EA, op * 0.90f) : applyAlpha(0xFF090D12, op * 0.85f);
-        paint.setShader(new RadialGradient(x, y, radius, centerColor, edgeColor, Shader.TileMode.CLAMP));
-        canvas.drawCircle(x, y, radius, paint);
-        paint.setShader(null);
+        // Clean Unfilled Disc / Custom Button rendering for text buttons
+        if (active || toggled) {
+            paint.setStyle(Paint.Style.FILL);
+            int fillBase = 0xFFFFFFFF;
+            if (pressTintHex != null && !pressTintHex.trim().isEmpty()) {
+                try {
+                    fillBase = Color.parseColor(pressTintHex);
+                } catch (Exception ignored) {}
+            }
+            paint.setColor(applyAlpha(fillBase, op * 0.50f));
+            canvas.drawCircle(x, y, effectiveRadius, paint);
+        }
 
-        outlinePaint.setStrokeWidth(active || toggled ? 3f : 1.8f);
-        int strokeColor = active ? 0xFFFFFFFF : (toggled ? 0xFF00E5FF : applyAlpha(0xFF4FC3F7, op * 0.80f));
-        outlinePaint.setColor(applyAlpha(strokeColor, op));
-        canvas.drawCircle(x, y, radius, outlinePaint);
+        outlinePaint.setStyle(Paint.Style.STROKE);
+        outlinePaint.setStrokeWidth(active || toggled ? 3.5f : 2.5f);
+        outlinePaint.setColor(applyAlpha(0x88000000, op));
+        canvas.drawCircle(x, y, effectiveRadius, outlinePaint);
 
-        textPaint.setColor(toggled ? 0xFF00E5FF : Color.WHITE);
+        outlinePaint.setStrokeWidth(active || toggled ? 2.5f : 1.8f);
+        outlinePaint.setColor(applyAlpha(0xFFFFFFFF, op));
+        canvas.drawCircle(x, y, effectiveRadius, outlinePaint);
+
+        textPaint.setShadowLayer(3f, 0f, 1f, applyAlpha(0xFF000000, 0.9f));
+        textPaint.setColor(Color.WHITE);
         textPaint.setAlpha((int)(Math.max(op, 0.5f) * 255));
         textPaint.setTextSize(textSize);
 
-        float maxTextWidth = radius * 1.55f;
+        float maxTextWidth = effectiveRadius * 1.55f;
         float measuredWidth = textPaint.measureText(label);
         if (measuredWidth > maxTextWidth) {
             textSize = textSize * (maxTextWidth / measuredWidth);
@@ -1141,6 +1211,7 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
 
         float yOffset = (textPaint.descent() + textPaint.ascent()) / 2f;
         canvas.drawText(label, x, y - yOffset, textPaint);
+        textPaint.clearShadowLayer();
     }
 
     private void drawGraphicStick(Canvas canvas) {
@@ -1157,6 +1228,25 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
         if (baseDrawable == null) baseDrawable = stickBaseDrawable;
 
         if (baseDrawable != null) {
+            // Draw a thin, crisp 25% opacity contour outline around the base graphic
+            float strokeWidth = 0.75f * scale;
+            for (float angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                float ox = x + (float)Math.cos(angle) * strokeWidth;
+                float oy = y + (float)Math.sin(angle) * strokeWidth;
+                baseDrawable.setBounds((int)(ox - radius), (int)(oy - radius), (int)(ox + radius), (int)(oy + radius));
+                
+                int strokeAlpha = (int)(Math.min(op, 1f) * 64); // 25% opacity
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    baseDrawable.setColorFilter(new android.graphics.BlendModeColorFilter(
+                        Color.argb(strokeAlpha, 0, 0, 0), android.graphics.BlendMode.SRC_IN));
+                } else {
+                    baseDrawable.setColorFilter(Color.argb(strokeAlpha, 0, 0, 0), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+                baseDrawable.draw(canvas);
+            }
+
+            // Draw primary base graphic on top
+            baseDrawable.setColorFilter(null);
             baseDrawable.setBounds((int)(x - radius), (int)(y - radius), (int)(x + radius), (int)(y + radius));
             baseDrawable.setAlpha((int)(op * 255));
             baseDrawable.draw(canvas);
@@ -1166,12 +1256,14 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
             canvas.drawCircle(x, y, radius, paint);
             paint.setShader(null);
 
+            outlinePaint.setStyle(Paint.Style.STROKE);
             outlinePaint.setStrokeWidth(2.2f);
             outlinePaint.setColor(applyAlpha(isHeld ? 0xFF00E5FF : 0xFF37474F, op));
             canvas.drawCircle(x, y, radius, outlinePaint);
         }
 
         if (editing && selectedControl >= 0 && layout.type(selectedControl) == TouchLayout.LEFT) {
+            outlinePaint.setStyle(Paint.Style.STROKE);
             outlinePaint.setStrokeWidth(3.5f);
             outlinePaint.setColor(Color.YELLOW);
             canvas.drawCircle(x, y, radius + 4f, outlinePaint);
@@ -1185,6 +1277,25 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
         if (knobDrawable == null) knobDrawable = stickKnobDrawable;
 
         if (knobDrawable != null) {
+            // Draw a thin, crisp 25% opacity contour outline around the knob graphic
+            float strokeWidth = 0.75f * scale;
+            for (float angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                float ox = kx + (float)Math.cos(angle) * strokeWidth;
+                float oy = ky + (float)Math.sin(angle) * strokeWidth;
+                knobDrawable.setBounds((int)(ox - kr), (int)(oy - kr), (int)(ox + kr), (int)(oy + kr));
+                
+                int strokeAlpha = (int)(Math.min(op, 1f) * 64); // 25% opacity
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    knobDrawable.setColorFilter(new android.graphics.BlendModeColorFilter(
+                        Color.argb(strokeAlpha, 0, 0, 0), android.graphics.BlendMode.SRC_IN));
+                } else {
+                    knobDrawable.setColorFilter(Color.argb(strokeAlpha, 0, 0, 0), android.graphics.PorterDuff.Mode.SRC_IN);
+                }
+                knobDrawable.draw(canvas);
+            }
+
+            // Draw primary knob graphic on top
+            knobDrawable.setColorFilter(null);
             knobDrawable.setBounds((int)(kx - kr), (int)(ky - kr), (int)(kx + kr), (int)(ky + kr));
             knobDrawable.setAlpha((int)(op * 255));
             knobDrawable.draw(canvas);
@@ -1196,6 +1307,7 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
             canvas.drawCircle(kx, ky, kr, paint);
             paint.setShader(null);
 
+            outlinePaint.setStyle(Paint.Style.STROKE);
             outlinePaint.setStrokeWidth(2f);
             outlinePaint.setColor(applyAlpha(isHeld ? 0xFFFFFFFF : 0xFF4FC3F7, op));
             canvas.drawCircle(kx, ky, kr, outlinePaint);
@@ -1211,12 +1323,10 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
         canvas.scale(scale, scale);
 
         if (!hidden || editing) {
-            // 1. Joystick
             if (layout.shown(TouchLayout.LEFT)) {
                 drawGraphicStick(canvas);
             }
 
-            // 2. Buttons
             for (int i = 0; i < layout.size(); i++) {
                 if (!layout.shown(i) || layout.type(i) == TouchLayout.LEFT)
                     continue;
@@ -1228,33 +1338,64 @@ public final class TouchControls extends FrameLayout implements SensorEventListe
                 boolean isToggled = toggledStates.get(i, false);
 
                 String iconKey = layout.iconFile(i);
-                if ((iconKey == null || iconKey.trim().isEmpty()) && type < KINDS.length) {
-                    iconKey = "tc_ic_" + KINDS[type].buttonName.toLowerCase(Locale.US);
-                } else if ((iconKey == null || iconKey.trim().isEmpty()) && type == TouchLayout.TB_HIDE) {
-                    iconKey = "tc_ic_hide";
-                }
                 Drawable custom = loadExternalDrawable(iconKey);
+
+                // Fall back to built-in resource icons if no explicit custom icon is set
+                if (custom == null) {
+                    if (type < KINDS.length) {
+                        String name = KINDS[type].buttonName.toLowerCase(Locale.US);
+                        if (name.equals("rt")) {
+                            iconKey = "tc_fire";
+                        } else if (name.equals("lt")) {
+                            iconKey = "tc_grenade";
+                        } else if (name.equals("start")) {
+                            iconKey = "tc_menu";
+                        } else if (name.equals("ls")) {
+                            iconKey = "tc_crouch";
+                        } else if (name.equals("rs")) {
+                            iconKey = "tc_zoom";
+                        } else if (name.equals("white")) {
+                            iconKey = "tc_flash";
+                        } else if (name.equals("black")) {
+                            iconKey = "tc_grenade_type";
+                        } else if (name.equals("a")) {
+                            iconKey = "tc_a_jump";
+                        } else if (name.equals("b")) {
+                            iconKey = "tc_b_melee";
+                        } else if (name.equals("x")) {
+                            iconKey = "tc_x_reload";
+                        } else if (name.equals("y")) {
+                            iconKey = "tc_y_weapon";
+                        } else {
+                            iconKey = "tc_" + name;
+                        }
+                    } else if (type == TouchLayout.TB_HIDE) {
+                        iconKey = "tc_gamepad";
+                    }
+                    custom = loadExternalDrawable(iconKey);
+                }
 
                 drawGraphicButton(canvas, layout.x(i), layout.y(i), layout.radius(i),
                         buttonDisplayLabel(i), isHeld, isToggled, Math.min(textSize, 15), op, custom);
 
                 if (editing && i == selectedControl) {
+                    outlinePaint.setStyle(Paint.Style.STROKE);
                     outlinePaint.setStrokeWidth(3.5f);
                     outlinePaint.setColor(Color.YELLOW);
                     canvas.drawCircle(layout.x(i), layout.y(i), layout.radius(i) + 4f, outlinePaint);
                 }
             }
         } else {
-            // Controls hidden in play mode: draw only the Touch toggle button
             for (int i = 0; i < layout.size(); i++) {
                 if (layout.type(i) == TouchLayout.TB_HIDE && layout.shown(i)) {
                     float textSize = 10.5f * Math.max(layout.sizeScale(i), layout.radius(i) / 38f);
-                    float op = layout.controlOpacity(i); // Uses the exact control opacity set by the user
+                    float op = layout.controlOpacity(i);
                     String iconKey = layout.iconFile(i);
-                    if (iconKey == null || iconKey.trim().isEmpty()) {
-                        iconKey = "tc_ic_hide";
-                    }
                     Drawable custom = loadExternalDrawable(iconKey);
+                    if (custom == null) {
+                        iconKey = "tc_gamepad";
+                        custom = loadExternalDrawable(iconKey);
+                    }
                     drawGraphicButton(canvas, layout.x(i), layout.y(i), layout.radius(i),
                             "Touch", false, false, Math.min(textSize, 15), op, custom);
                     break;
